@@ -29,8 +29,8 @@ void handle_error(const char *message);
 void add_account(const char *id_client, const char *id_compte, const char *password, double initial_balance);
 Account* find_account(const char *id_client, const char *id_compte, const char *password);
 void add_operation(Account *account, const char *operation);
-void handle_ajout(int client_socket, const char *id_client, const char *id_compte, const char *password, double somme);
-void handle_retrait(int client_socket, const char *id_client, const char *id_compte, const char *password, double somme);
+int handle_ajout(const char *id_client, const char *id_compte, const char *password, double somme);
+int handle_retrait(const char *id_client, const char *id_compte, const char *password, double somme);
 void handle_solde(int client_socket, const char *id_client, const char *id_compte, const char *password);
 void handle_operations(int client_socket, const char *id_client, const char *id_compte, const char *password);
 
@@ -40,9 +40,9 @@ int main() {
     socklen_t client_address_len = sizeof(client_address);
 
     // Initialize some accounts (assuming account creation is already done)
-    add_account("client1", "account1", "password1", 1000.0);
-    add_account("client1", "account2", "password1", 500.0);
-    add_account("client2", "account1", "password2", 2000.0);
+    add_account("Inessa", "123", "pass1", 1050.0);
+    add_account("Philip", "456", "pass2", 520.0);
+    add_account("Marie", "789", "pass3", 2200.0);
 
     // 1. creer le socket : AF_INET: IPv4, SOCK_STREAM: TCP, 0: IP
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -107,17 +107,49 @@ void handle_client(int client_socket) {
         // Parse the command
         char command[BUFFER_SIZE];
         char id_client[50], id_compte[50], password[50];
-        double somme;
-        sscanf(buffer, "%s %s %s %s %lf", command, id_client, id_compte, password, &somme);
+        double somme = 0.0;
+        int parsed_args = sscanf(buffer, "%s %s %s %s %lf", command, id_client, id_compte, password, &somme);
 
         if (strcmp(command, "AJOUT") == 0) {
-            handle_ajout(client_socket, id_client, id_compte, password, somme);
+            if (parsed_args == 5 && somme != 0) {
+                if (handle_ajout(id_client, id_compte, password, somme)) {
+                    const char *response = "OK\n";
+                    send(client_socket, response, strlen(response), 0);
+                } else {
+                    const char *response = "KO\n";
+                    send(client_socket, response, strlen(response), 0);
+                }
+            } else {
+                const char *response = "KO\n";
+                send(client_socket, response, strlen(response), 0);
+            }
         } else if (strcmp(command, "RETRAIT") == 0) {
-            handle_retrait(client_socket, id_client, id_compte, password, somme);
+            if (parsed_args == 5) {
+                if (handle_retrait(id_client, id_compte, password, somme)) {
+                    const char *response = "OK\n";
+                    send(client_socket, response, strlen(response), 0);
+                } else {
+                    const char *response = "KO\n";
+                    send(client_socket, response, strlen(response), 0);
+                }
+            } else {
+                const char *response = "KO\n";
+                send(client_socket, response, strlen(response), 0);
+            }
         } else if (strcmp(command, "SOLDE") == 0) {
-            handle_solde(client_socket, id_client, id_compte, password);
+            if (parsed_args == 4) {
+                handle_solde(client_socket, id_client, id_compte, password);
+            } else {
+                const char *response = "Invalid command: missing or  arguments for SOLDE\n";
+                send(client_socket, response, strlen(response), 0);
+            }
         } else if (strcmp(command, "OPERATIONS") == 0) {
-            handle_operations(client_socket, id_client, id_compte, password);
+            if (parsed_args == 4) {
+                handle_operations(client_socket, id_client, id_compte, password);
+            } else {
+                const char *response = "Invalid command: missing arguments for OPERATIONS\n";
+                send(client_socket, response, strlen(response), 0);
+            }
         } else {
             const char *response = "Invalid command\n";
             send(client_socket, response, strlen(response), 0);
@@ -131,7 +163,7 @@ void handle_client(int client_socket) {
     close(client_socket);
 }
 
-// Helper functions implementation
+
 
 void add_account(const char *id_client, const char *id_compte, const char *password, double initial_balance) {
     if (account_count < MAX_ACCOUNTS) {
@@ -178,38 +210,33 @@ void add_operation(Account *account, const char *operation) {
     strcpy(account->last_operation_date, account->operation_dates[account->operation_count - 1]);
 }
 
-void handle_ajout(int client_socket, const char *id_client, const char *id_compte, const char *password, double somme) {
+int handle_ajout(const char *id_client, const char *id_compte, const char *password, double somme) {
     Account *account = find_account(id_client, id_compte, password);
-    if (account) {
+    if (account && somme > 0) {
         account->balance += somme;
         char operation[BUFFER_SIZE];
         snprintf(operation, BUFFER_SIZE, "AJOUT %.2f", somme);
         add_operation(account, operation);
-        const char *response = "OK\n";
-        send(client_socket, response, strlen(response), 0);
+        return 1; // Success
     } else {
-        const char *response = "KO\n";
-        send(client_socket, response, strlen(response), 0);
+        return 0; // Failure
     }
 }
 
-void handle_retrait(int client_socket, const char *id_client, const char *id_compte, const char *password, double somme) {
+int handle_retrait(const char *id_client, const char *id_compte, const char *password, double somme) {
     Account *account = find_account(id_client, id_compte, password);
-    if (account) {
+    if (account && somme > 0) {
         if (account->balance >= somme) {
             account->balance -= somme;
             char operation[BUFFER_SIZE];
             snprintf(operation, BUFFER_SIZE, "RETRAIT %.2f", somme);
             add_operation(account, operation);
-            const char *response = "OK\n";
-            send(client_socket, response, strlen(response), 0);
+            return 1; // Success
         } else {
-            const char *response = "KO\n";
-            send(client_socket, response, strlen(response), 0);
+            return 0; // Failure
         }
     } else {
-        const char *response = "KO\n";
-        send(client_socket, response, strlen(response), 0);
+        return 0; // Failure
     }
 }
 

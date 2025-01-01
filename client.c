@@ -82,11 +82,11 @@ void interact_with_server(int socket) {
         } else if (strncmp(buffer, "KO", 2) == 0) {
             printf("KO\n");
         } else if (strncmp(buffer, "RES_SOLDE", 9) == 0) {
-            printf("RES_SOLDE: %s\n", buffer + 10); // Skip "RES_SOLDE "
+            printf("RES_SOLDE:\n%s\n", buffer + 10); // Skip "RES_SOLDE "
         } else if (strncmp(buffer, "RES_OPERATIONS", 14) == 0) {
             printf("RES_OPERATIONS:\n%s\n", buffer + 15); // Skip "RES_OPERATIONS "
         } else {
-            printf("Server response: %s\n", buffer);
+            printf("%s\n", buffer);
         }
     }
 }
