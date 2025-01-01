@@ -69,7 +69,7 @@ void interact_with_server(int socket) {
         }
 
         // Receive the response from the server
-        int bytes_received = read(socket, buffer, BUFFER_SIZE - 1);
+        int bytes_received = recv(socket, buffer, BUFFER_SIZE - 1, 0);
         if (bytes_received < 0) {
             handle_error("Failed to receive response");
         }

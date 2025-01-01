@@ -24,146 +24,116 @@ typedef struct {
 Account accounts[MAX_ACCOUNTS];
 int account_count = 0;
 
-void handle_client(int client_socket);
+void handle_client(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, char *buffer);
 void handle_error(const char *message);
 void add_account(const char *id_client, const char *id_compte, const char *password, double initial_balance);
 Account* find_account(const char *id_client, const char *id_compte, const char *password);
 void add_operation(Account *account, const char *operation);
 int handle_ajout(const char *id_client, const char *id_compte, const char *password, double somme);
 int handle_retrait(const char *id_client, const char *id_compte, const char *password, double somme);
-void handle_solde(int client_socket, const char *id_client, const char *id_compte, const char *password);
-void handle_operations(int client_socket, const char *id_client, const char *id_compte, const char *password);
+void handle_solde(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, const char *id_client, const char *id_compte, const char *password);
+void handle_operations(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, const char *id_client, const char *id_compte, const char *password);
 
 int main() {
-    int server_socket, client_socket;
+    int server_socket;
     struct sockaddr_in server_address, client_address;
     socklen_t client_address_len = sizeof(client_address);
+    char buffer[BUFFER_SIZE];
 
     // Initialize some accounts (assuming account creation is already done)
     add_account("Inessa", "123", "pass1", 1050.0);
     add_account("Philip", "456", "pass2", 520.0);
     add_account("Marie", "789", "pass3", 2200.0);
 
-    // 1. creer le socket : AF_INET: IPv4, SOCK_STREAM: TCP, 0: IP
-    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    // 1. Create the socket: AF_INET: IPv4, SOCK_DGRAM: UDP, 0: IP
+    if ((server_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         handle_error("Socket creation failed");
     }
 
-    //2. server address proporties : sin_family: Address family (IPv4), sin_addr: IP address, sin_port: Port number
+    // 2. Server address properties: sin_family: Address family (IPv4), sin_addr: IP address, sin_port: Port number
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = INADDR_ANY;
     server_address.sin_port = htons(PORT);
 
-
-    // 3. bind the socket to the server address
+    // 3. Bind the socket to the server address
     if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
         handle_error("Bind failed");
     }
 
-    // 4. listen for connections
-    if (listen(server_socket, 5) < 0) {
-        handle_error("Listen failed");
-    }
-
     printf("Server is listening on port %d...\n", PORT);
 
-    // 5. Accepter une connexion client
+    // 4. Receive data from clients
     while (1) {
-        // accept: Waits for a client to connect. Returns a new socket for the client.
-        //client_socket : A new socket specifically for communication with this client.
-        client_socket = accept(server_socket, (struct sockaddr *)&client_address, &client_address_len);
-        if (client_socket < 0) {
-            perror("Failed to accept client connection");
-            continue; // Continue to accept other connections
+        int bytes_received = recvfrom(server_socket, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *)&client_address, &client_address_len);
+        if (bytes_received < 0) {
+            perror("Failed to receive data from client");
+            continue; // Continue to receive other data
         }
 
-        //inet_ntoa: Convert IP address to string
-        //ntohs: Convert port number to host byte order
-        printf("Client connected: %s:%d\n",
-               inet_ntoa(client_address.sin_addr),
-               ntohs(client_address.sin_port));
+        buffer[bytes_received] = '\0'; // Null-terminate the received string
+        printf("Received from client: %s\n", buffer);
 
         // Handle the client in a separate function
-        handle_client(client_socket);
-
-        printf("Client disconnected: %s:%d\n",
-               inet_ntoa(client_address.sin_addr),
-               ntohs(client_address.sin_port));
+        handle_client(server_socket, &client_address, client_address_len, buffer);
     }
 
-    // 6. Close the server socket
+    // 5. Close the server socket
     close(server_socket);
     return 0;
 }
 
-void handle_client(int client_socket) {
-    char buffer[BUFFER_SIZE];
-    int bytes_received;
+void handle_client(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, char *buffer) {
+    // Parse the command
+    char command[BUFFER_SIZE];
+    char id_client[50], id_compte[50], password[50];
+    double somme = 0.0;
+    int parsed_args = sscanf(buffer, "%s %s %s %s %lf", command, id_client, id_compte, password, &somme);
 
-    while ((bytes_received = read(client_socket, buffer, BUFFER_SIZE - 1)) > 0) {
-        buffer[bytes_received] = '\0'; // Null-terminate the received string
-        printf("Received from client: %s\n", buffer);
-
-        // Parse the command
-        char command[BUFFER_SIZE];
-        char id_client[50], id_compte[50], password[50];
-        double somme = 0.0;
-        int parsed_args = sscanf(buffer, "%s %s %s %s %lf", command, id_client, id_compte, password, &somme);
-
-        if (strcmp(command, "AJOUT") == 0) {
-            if (parsed_args == 5 && somme != 0) {
-                if (handle_ajout(id_client, id_compte, password, somme)) {
-                    const char *response = "OK\n";
-                    send(client_socket, response, strlen(response), 0);
-                } else {
-                    const char *response = "KO\n";
-                    send(client_socket, response, strlen(response), 0);
-                }
+    if (strcmp(command, "AJOUT") == 0) {
+        if (parsed_args == 5 && somme != 0) {
+            if (handle_ajout(id_client, id_compte, password, somme)) {
+                const char *response = "OK\n";
+                sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
             } else {
                 const char *response = "KO\n";
-                send(client_socket, response, strlen(response), 0);
-            }
-        } else if (strcmp(command, "RETRAIT") == 0) {
-            if (parsed_args == 5) {
-                if (handle_retrait(id_client, id_compte, password, somme)) {
-                    const char *response = "OK\n";
-                    send(client_socket, response, strlen(response), 0);
-                } else {
-                    const char *response = "KO\n";
-                    send(client_socket, response, strlen(response), 0);
-                }
-            } else {
-                const char *response = "KO\n";
-                send(client_socket, response, strlen(response), 0);
-            }
-        } else if (strcmp(command, "SOLDE") == 0) {
-            if (parsed_args == 4) {
-                handle_solde(client_socket, id_client, id_compte, password);
-            } else {
-                const char *response = "Invalid command: missing or  arguments for SOLDE\n";
-                send(client_socket, response, strlen(response), 0);
-            }
-        } else if (strcmp(command, "OPERATIONS") == 0) {
-            if (parsed_args == 4) {
-                handle_operations(client_socket, id_client, id_compte, password);
-            } else {
-                const char *response = "Invalid command: missing arguments for OPERATIONS\n";
-                send(client_socket, response, strlen(response), 0);
+                sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
             }
         } else {
             const char *response = "KO\n";
-            send(client_socket, response, strlen(response), 0);
+            sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
         }
+    } else if (strcmp(command, "RETRAIT") == 0) {
+        if (parsed_args == 5 && somme != 0) {
+            if (handle_retrait(id_client, id_compte, password, somme)) {
+                const char *response = "OK\n";
+                sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
+            } else {
+                const char *response = "KO\n";
+                sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
+            }
+        } else {
+            const char *response = "KO\n";
+            sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
+        }
+    } else if (strcmp(command, "SOLDE") == 0) {
+        if (parsed_args == 4) {
+            handle_solde(server_socket, client_address, client_address_len, id_client, id_compte, password);
+        } else {
+            const char *response = "Invalid command: missing arguments for SOLDE\n";
+            sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
+        }
+    } else if (strcmp(command, "OPERATIONS") == 0) {
+        if (parsed_args == 4) {
+            handle_operations(server_socket, client_address, client_address_len, id_client, id_compte, password);
+        } else {
+            const char *response = "Invalid command: missing arguments for OPERATIONS\n";
+            sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
+        }
+    } else {
+        const char *response = "Invalid command\n";
+        sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
     }
-
-    if (bytes_received < 0) {
-        perror("Failed to read from client");
-    }
-
-    close(client_socket);
 }
-
-
 
 void add_account(const char *id_client, const char *id_compte, const char *password, double initial_balance) {
     if (account_count < MAX_ACCOUNTS) {
@@ -240,19 +210,19 @@ int handle_retrait(const char *id_client, const char *id_compte, const char *pas
     }
 }
 
-void handle_solde(int client_socket, const char *id_client, const char *id_compte, const char *password) {
+void handle_solde(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, const char *id_client, const char *id_compte, const char *password) {
     Account *account = find_account(id_client, id_compte, password);
     if (account) {
         char response[BUFFER_SIZE];
         snprintf(response, BUFFER_SIZE, "RES_SOLDE %.2f€ %s\n", account->balance, account->last_operation_date);
-        send(client_socket, response, strlen(response), 0);
+        sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
     } else {
         const char *response = "KO\n";
-        send(client_socket, response, strlen(response), 0);
+        sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
     }
 }
 
-void handle_operations(int client_socket, const char *id_client, const char *id_compte, const char *password) {
+void handle_operations(int server_socket, struct sockaddr_in *client_address, socklen_t client_address_len, const char *id_client, const char *id_compte, const char *password) {
     Account *account = find_account(id_client, id_compte, password);
     if (account) {
         char response[BUFFER_SIZE] = "RES_OPERATIONS\n";
@@ -262,10 +232,10 @@ void handle_operations(int client_socket, const char *id_client, const char *id_
             strcat(response, operation);
             strcat(response, "\n");
         }
-        send(client_socket, response, strlen(response), 0);
+        sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
     } else {
         const char *response = "KO\n";
-        send(client_socket, response, strlen(response), 0);
+        sendto(server_socket, response, strlen(response), 0, (struct sockaddr *)client_address, client_address_len);
     }
 }
 

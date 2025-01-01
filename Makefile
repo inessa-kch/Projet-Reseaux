@@ -1,10 +1,17 @@
-all: server client
+all: server_tcp client_tcp server_udp client_udp
 
-server: server.c
-	gcc -o server server.c
+server_tcp: server_tcp.c
+	gcc -o server_tcp server_tcp.c
 
-client: client.c
-	gcc -o client client.c
+client_tcp: client_tcp.c
+	gcc -o client_tcp client_tcp.c
+
+server_upd: serve_udp.c
+	gcc -o server_udp server_udp.c
+
+client_udp: client_udp.c
+	gcc -o client_udp client_udp.c
+
 
 clean:
-	rm -f server client
+	rm -f server_tcp client_tcp server_udp client_udp
