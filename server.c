@@ -151,7 +151,7 @@ void handle_client(int client_socket) {
                 send(client_socket, response, strlen(response), 0);
             }
         } else {
-            const char *response = "Invalid command\n";
+            const char *response = "KO\n";
             send(client_socket, response, strlen(response), 0);
         }
     }
@@ -215,7 +215,7 @@ int handle_ajout(const char *id_client, const char *id_compte, const char *passw
     if (account && somme > 0) {
         account->balance += somme;
         char operation[BUFFER_SIZE];
-        snprintf(operation, BUFFER_SIZE, "AJOUT %.2f", somme);
+        snprintf(operation, BUFFER_SIZE, "AJOUT %.2f€", somme);
         add_operation(account, operation);
         return 1; // Success
     } else {
@@ -229,7 +229,7 @@ int handle_retrait(const char *id_client, const char *id_compte, const char *pas
         if (account->balance >= somme) {
             account->balance -= somme;
             char operation[BUFFER_SIZE];
-            snprintf(operation, BUFFER_SIZE, "RETRAIT %.2f", somme);
+            snprintf(operation, BUFFER_SIZE, "RETRAIT %.2f€", somme);
             add_operation(account, operation);
             return 1; // Success
         } else {
@@ -244,7 +244,7 @@ void handle_solde(int client_socket, const char *id_client, const char *id_compt
     Account *account = find_account(id_client, id_compte, password);
     if (account) {
         char response[BUFFER_SIZE];
-        snprintf(response, BUFFER_SIZE, "RES_SOLDE %.2f %s\n", account->balance, account->last_operation_date);
+        snprintf(response, BUFFER_SIZE, "RES_SOLDE %.2f€ %s\n", account->balance, account->last_operation_date);
         send(client_socket, response, strlen(response), 0);
     } else {
         const char *response = "KO\n";
