@@ -8,14 +8,14 @@
 #define BUFFER_SIZE 1024
 
 void handle_error(const char *message);
-void interact_with_server(int socket);
+void interact_with_server(int socket, struct sockaddr_in *server_address);
 
 int main() {
     int client_socket;
     struct sockaddr_in server_address;
 
     // Step 1: Create the socket
-    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((client_socket = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         handle_error("Socket creation failed");
     }
 
@@ -27,17 +27,12 @@ int main() {
         handle_error("Invalid address or address not supported");
     }
 
-    // Step 3: Connect to the server
-    if (connect(client_socket, (struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
-        handle_error("Connection to the server failed");
-    }
+    printf("Ready to communicate with the server.\n");
 
-    printf("Connected to the server.\n");
+    // Step 3: Interact with the server
+    interact_with_server(client_socket, &server_address);
 
-    // Step 4: Interact with the server
-    interact_with_server(client_socket);
-
-    // Step 5: Close the socket
+    // Step 4: Close the socket
     printf("Disconnecting from the server.\n");
     close(client_socket);
     return 0;
@@ -48,9 +43,10 @@ void handle_error(const char *message) {
     exit(EXIT_FAILURE);
 }
 
-void interact_with_server(int socket) {
+void interact_with_server(int socket, struct sockaddr_in *server_address) {
     char buffer[BUFFER_SIZE];
     char request[BUFFER_SIZE];
+    socklen_t server_address_len = sizeof(*server_address);
 
     while (1) {
         // Get user input
@@ -64,12 +60,12 @@ void interact_with_server(int socket) {
         }
 
         // Send the request to the server
-        if (send(socket, request, strlen(request), 0) < 0) {
+        if (sendto(socket, request, strlen(request), 0, (struct sockaddr *)server_address, server_address_len) < 0) {
             handle_error("Failed to send request");
         }
 
         // Receive the response from the server
-        int bytes_received = recv(socket, buffer, BUFFER_SIZE - 1, 0);
+        int bytes_received = recvfrom(socket, buffer, BUFFER_SIZE - 1, 0, (struct sockaddr *)server_address, &server_address_len);
         if (bytes_received < 0) {
             handle_error("Failed to receive response");
         }
